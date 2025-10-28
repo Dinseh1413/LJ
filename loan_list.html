@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loan List</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --primary-color: #3949ab;
+            --primary-light: #e8eaf6;
+            --success-color: #388e3c;
+            --success-light: #e8f5e9;
+            --closed-color: #757575;
+            --closed-light: #f5f5f5;
+            --text-color: #212121;
+            --text-light: #757575;
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.1);
+            --border-radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        /* --- Controls (Search, Filter, Sort) --- */
+        .controls-container {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        /* On larger screens, put filters side-by-side */
+        @media (min-width: 600px) {
+            .controls-container {
+                grid-template-columns: 1fr 1fr;
+            }
+            #search-bar {
+                grid-column: 1 / -1; /* Make search span full width */
+            }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 0.8rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            background: #fff;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px var(--primary-light);
+        }
+
+        /* --- Loan List --- */
+        #loan-list-container {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .loan-item-link {
+            display: block;
+            text-decoration: none;
+            color: var(--text-color);
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        
+        .loan-item-link:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
+        .loan-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-areas: 
+                "name principal"
+                "date status";
+            gap: 0.5rem 1rem;
+        }
+
+        .loan-customer {
+            grid-area: name;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .loan-date {
+            grid-area: date;
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        .loan-principal {
+            grid-area: principal;
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-align: right;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        }
+
+        .loan-status {
+            grid-area: status;
+            justify-self: end;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+        }
+        
+        .loan-status.Active {
+            background-color: var(--success-light);
+            color: var(--success-color);
+        }
+        
+        .loan-status.Closed {
+            background-color: var(--closed-light);
+            color: var(--closed-color);
+        }
+
+        #loading-message, #empty-message {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 1.1rem;
+            padding: 2rem;
+        }
+
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1>Loan List</h1>
+
+        <section class="controls-container">
+            <div class="form-group">
+                <label for="search-bar">Search by Name</label>
+                <input type="search" id="search-bar" placeholder="e.g., Rajesh Kumar">
+            </div>
+            <div class="form-group">
+                <label for="filter-status">Filter by Status</label>
+                <select id="filter-status">
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Closed">Closed</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="sort-by">Sort By</label>
+                <select id="sort-by">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="principal-high">Principal (High-Low)</option>
+                    <option value="principal-low">Principal (Low-High)</option>
+                </select>
+            </div>
+        </section>
+
+        <section id="loan-list-container">
+            <p id="loading-message">Loading loans...</p>
+            </section>
+
+    </main>
+
+    <script>
+        // --- 1. SUPABASE SETUP ---
+        const SUPABASE_URL = 'https://xoqtcvydgbtskmqdjdog.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 2. GLOBAL STATE ---
+        let allLoans = []; // This will store the master list of loans
+
+        // --- 3. DOM ELEMENTS ---
+        const dom = {
+            loanListContainer: document.getElementById('loan-list-container'),
+            loadingMessage: document.getElementById('loading-message'),
+            searchBar: document.getElementById('search-bar'),
+            filterStatus: document.getElementById('filter-status'),
+            sortBy: document.getElementById('sort-by')
+        };
+        
+        // --- 4. FORMATTERS ---
+        const currencyFormatter = new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+        });
+        
+        const dateFormatter = (dateStr) => {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+            });
+        };
+        
+        /**
+         * Renders the list of loans based on current filters and search.
+         */
+        function renderLoanList() {
+            // 1. Get current values from controls
+            const searchTerm = dom.searchBar.value.toLowerCase();
+            const filterValue = dom.filterStatus.value;
+            const sortValue = dom.sortBy.value;
+
+            // 2. Start with the master list
+            let processedLoans = [...allLoans];
+
+            // 3. Apply Filter
+            if (filterValue !== 'All') {
+                processedLoans = processedLoans.filter(loan => loan.status === filterValue);
+            }
+
+            // 4. Apply Search
+            if (searchTerm) {
+                processedLoans = processedLoans.filter(loan => 
+                    loan.customers && loan.customers.name.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            // 5. Apply Sort
+            switch(sortValue) {
+                case 'newest':
+                    processedLoans.sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+                    break;
+                case 'oldest':
+                    processedLoans.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+                    break;
+                case 'principal-high':
+                    processedLoans.sort((a, b) => b.principal_amount - a.principal_amount);
+                    break;
+                case 'principal-low':
+                    processedLoans.sort((a, b) => a.principal_amount - b.principal_amount);
+                    break;
+            }
+
+            // 6. Render HTML
+            dom.loanListContainer.innerHTML = ''; // Clear list
+
+            if (processedLoans.length === 0) {
+                dom.loanListContainer.innerHTML = '<p id="empty-message">No loans match your criteria.</p>';
+                return;
+            }
+
+            processedLoans.forEach(loan => {
+                const customerName = loan.customers ? loan.customers.name : 'Unknown Customer';
+                const status = loan.status || 'N/A';
+                
+                // Create the link element
+                const link = document.createElement('a');
+                link.className = 'loan-item-link';
+                // This is the key action: set the href with the URL parameter
+                link.href = `loan_details.html?loan_id=${loan.id}`; 
+                
+                link.innerHTML = `
+                    <div class="loan-item">
+                        <h3 class="loan-customer">${customerName}</h3>
+                        <div class="loan-principal">${currencyFormatter.format(loan.principal_amount)}</div>
+                        <div class="loan-date">Started: ${dateFormatter(loan.start_date)}</div>
+                        <span class="loan-status ${status}">${status}</span>
+                    </div>
+                `;
+                dom.loanListContainer.appendChild(link);
+            });
+        }
+        
+        /**
+         * Fetches all loans and their customer details from Supabase.
+         */
+        async function fetchLoans() {
+            // This query fetches all columns from 'loans' and joins the 'name'
+            // from the 'customers' table where loans.customer_id = customers.id
+            const { data, error } = await supabase
+                .from('loans')
+                .select(`
+                    id,
+                    principal_amount,
+                    start_date,
+                    status,
+                    customers ( name ) 
+                `)
+                .order('start_date', { ascending: false }); // Default sort
+
+            if (error) {
+                console.error('Error fetching loans:', error);
+                dom.loadingMessage.textContent = 'Error loading loans. Please try again.';
+                return;
+            }
+            
+            allLoans = data || [];
+            dom.loadingMessage.style.display = 'none';
+            renderLoanList();
+        }
+
+        // --- 5. INITIALIZATION ---
+        function init() {
+            // Add event listeners to all controls
+            dom.searchBar.addEventListener('input', renderLoanList);
+            dom.filterStatus.addEventListener('change', renderLoanList);
+            dom.sortBy.addEventListener('change', renderLoanList);
+            
+            // Fetch the initial data
+            fetchLoans();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
