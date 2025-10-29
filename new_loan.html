@@ -589,7 +589,11 @@
                 // alert('Loan created successfully!'); // <-- Replaced this
                 showToast('Loan created successfully!', 'success');
 
-               
+                // MODIFIED: Redirect after a short delay so user can see the toast
+                setTimeout(() => {
+                    window.location.href = `new_loan.html`;
+                }, 1000); // 1-second delay
+
             } catch (error) {
                 console.error('Error creating loan:', error);
 
