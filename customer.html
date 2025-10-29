@@ -46,6 +46,42 @@
             font-size: 1.75rem;
         }
 
+        /* --- NEW: Search Bar --- */
+        .search-bar-container {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-bar-container .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: var(--text-light);
+            stroke-width: 2.5;
+        }
+
+        #customer-search-input {
+            width: 100%;
+            padding: 0.9rem;
+            padding-left: 45px; /* Space for icon */
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            background: var(--card-bg);
+            font-family: inherit;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            -webkit-appearance: none; /* Fix for iOS input styling */
+        }
+        
+        #customer-search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px var(--primary-light);
+        }
+
         /* --- Customer List Styles --- */
         .list-container {
             background: var(--card-bg);
@@ -200,6 +236,11 @@
     <main class="container">
         <h1>Customers</h1>
 
+        <div class="search-bar-container">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="search" id="customer-search-input" placeholder="Search by name or phone..." autocapitalize="none" autocorrect="off">
+        </div>
+
         <section class="list-container">
             <div id="loading-message">Loading customers...</div>
             <div id="customer-list">
@@ -208,7 +249,7 @@
     </main>
     
     <nav class="bottom-nav">
-        <a href="#" class="nav-item">
+        <a href="dashboard.html" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
             Dashboard
         </a>
@@ -234,13 +275,13 @@
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
         const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // --- 2. HELPER FUNCTIONS ---
+        // --- 2. GLOBAL STATE ---
+        let allCustomers = []; // To store the full list of customers
+
+        // --- 3. HELPER FUNCTIONS ---
 
         /**
          * Shows a mobile-friendly toast notification.
-         * @param {string} message The message to display.
-         * @param {string} type 'success' or 'error' for styling.
-         * @param {number} duration Time in ms to show the toast.
          */
         function showToast(message, type = 'error', duration = 3000) {
             const container = document.getElementById('toast-container');
@@ -266,19 +307,71 @@
         }
 
         /**
-         * Fetches and displays all customers from Supabase.
+         * NEW: Renders the customer list based on the search term.
+         * This function reads from the `allCustomers` array.
          */
-        async function displayCustomers() {
+        function renderCustomerList() {
             const listEl = document.getElementById('customer-list');
-            const loadingEl = document.getElementById('loading-message');
+            const searchInput = document.getElementById('customer-search-input');
+            if (!listEl || !searchInput) return;
 
-            if (!listEl || !loadingEl) {
-                console.error('Missing list or loading elements');
+            const searchTerm = searchInput.value.toLowerCase();
+
+            // Filter the global customer list
+            const filteredCustomers = allCustomers.filter(customer => {
+                const nameMatch = customer.name.toLowerCase().includes(searchTerm);
+                // Check if phone exists before trying to search it
+                const phoneMatch = customer.phone && customer.phone.includes(searchTerm);
+                return nameMatch || phoneMatch;
+            });
+
+            // Handle no results
+            if (filteredCustomers.length === 0) {
+                if (allCustomers.length > 0) {
+                    listEl.innerHTML = '<p style="text-align: center; color: var(--text-light);">No customers match your search.</p>';
+                } else {
+                    // This case handles when the initial fetch is empty
+                    listEl.innerHTML = '<p style="text-align: center; color: var(--text-light);">No customers found.</p>';
+                }
                 return;
             }
 
+            // Build the HTML for each customer card
+            let html = '';
+            for (const customer of filteredCustomers) {
+                html += `
+                    <a href="customer_details.html?id=${customer.id}" class="customer-card">
+                        <div class="customer-info">
+                            <h3>${customer.name}</h3>
+                            <p>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                ${customer.phone || 'No phone'}
+                            </p>
+                            ${customer.address ? `
+                            <p>
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                ${customer.address}
+                            </p>` : ''}
+                        </div>
+                        <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </a>
+                `;
+            }
+            
+            // Set the generated HTML to the list container
+            listEl.innerHTML = html;
+        }
+
+        /**
+         * MODIFIED: Fetches all customers and stores them globally.
+         */
+        async function loadAllCustomers() {
+            const listEl = document.getElementById('customer-list');
+            const loadingEl = document.getElementById('loading-message');
+
+            if (!listEl || !loadingEl) return;
+
             try {
-                // Fetch all columns from the customers table
                 const { data, error } = await sbClient
                     .from('customers')
                     .select('*')
@@ -286,41 +379,9 @@
 
                 if (error) throw error; // Jump to catch block
 
-                // Clear loading message
-                loadingEl.style.display = 'none';
-
-                if (data.length === 0) {
-                    listEl.innerHTML = '<p style="text-align: center; color: var(--text-light);">No customers found.</p>';
-                    return;
-                }
-
-                // Build the HTML for each customer card
-                let html = '';
-                for (const customer of data) {
-                    
-                    // Create an <a> tag to make the whole card a link
-                    // This assumes you will have a `customer_details.html` page
-                    html += `
-                        <a href="customer_details.html?id=${customer.id}" class="customer-card">
-                            <div class="customer-info">
-                                <h3>${customer.name}</h3>
-                                <p>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                                    ${customer.phone || 'No phone'}
-                                </p>
-                                ${customer.address ? `
-                                <p>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                                    ${customer.address}
-                                </p>` : ''}
-                            </div>
-                            <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                        </a>
-                    `;
-                }
-                
-                // Set the generated HTML to the list container
-                listEl.innerHTML = html;
+                allCustomers = data;    // Store the data in the global array
+                renderCustomerList();   // Do the initial render
+                loadingEl.style.display = 'none'; // Hide loading message
 
             } catch (error) {
                 console.error('Error fetching customers:', error);
@@ -329,10 +390,17 @@
             }
         }
 
-        // --- 3. INITIALIZATION ---
+        // --- 4. INITIALIZATION ---
         
         function init() {
-            displayCustomers();
+            // Load all customers from Supabase
+            loadAllCustomers();
+            
+            // Add the event listener for the search bar
+            const searchInput = document.getElementById('customer-search-input');
+            if (searchInput) {
+                searchInput.addEventListener('input', renderCustomerList);
+            }
         }
         
         document.addEventListener('DOMContentLoaded', init);
