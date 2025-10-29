@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Details</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --primary-color: #3949ab;
+            --primary-light: #e8eaf6;
+            --secondary-color: #d32f2f;
+            --text-color: #212121;
+            --text-light: #757575;
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --border-radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding-bottom: 90px; /* Space for bottom nav */
+        }
+
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.75rem;
+        }
+        
+        h2 {
+            font-size: 1.25rem;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* --- Customer Details Card --- */
+        .details-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        #customer-name-header {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1rem;
+            color: var(--text-color);
+            padding: 0.5rem 0;
+        }
+        
+        .detail-item svg {
+            width: 20px;
+            height: 20px;
+            color: var(--primary-color);
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+        
+        #loading-message {
+            text-align: center;
+            padding: 2.5rem;
+            font-size: 1rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        /* --- Loan List Styles --- */
+        #loan-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .loan-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        
+        .loan-card:hover {
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .loan-card-info h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .loan-card-info p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+
+        .loan-status {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        /* Status-specific styles */
+        .status-active {
+            background-color: #e8f5e9; /* Light green */
+            color: #388e3c; /* Dark green */
+        }
+        .status-paid {
+            background-color: #f5f5f5; /* Light gray */
+            color: #757575; /* Dark gray */
+        }
+        .status-overdue {
+            background-color: #ffcdd2; /* Light red */
+            color: #d32f2f; /* Dark red */
+        }
+
+        .loan-card .chevron-icon {
+            width: 20px;
+            height: 20px;
+            color: var(--text-light);
+            flex-shrink: 0;
+            margin-left: 1rem;
+        }
+
+        /* --- Bottom Navigation --- */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            background-color: var(--card-bg);
+            box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
+            padding: 0.75rem 0.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: var(--text-light);
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0 0.5rem;
+            flex-grow: 1;
+        }
+        
+        .nav-item.active {
+            color: var(--primary-color);
+        }
+
+        .nav-item svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 4px;
+            stroke-width: 2;
+        }
+        
+        /* --- Toast Notifications --- */
+        #toast-container {
+            position: fixed;
+            bottom: 100px; /* Above the bottom nav */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .toast {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #333;
+            color: #fff;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-size: 0.95rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            text-align: center;
+            width: 100%;
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .toast.toast-error {
+            background-color: var(--secondary-color);
+        }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1>Customer Details</h1>
+
+        <section id="customer-details-card" class="details-card">
+            <div id="loading-customer-message" style="text-align: center; padding: 1rem; color: var(--text-light);">Loading details...</div>
+            <div id="customer-info-content" style="display: none;">
+                <h2 id="customer-name-header"></h2>
+                <div class="detail-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                    <span id="customer-phone"></span>
+                </div>
+                <div class="detail-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span id="customer-address"></span>
+                </div>
+            </div>
+        </section>
+
+        <h2>Loans</h2>
+        <section class="details-card" id="loan-list-container">
+            <div id="loading-loans-message" style="text-align: center; padding: 1rem; color: var(--text-light);">Loading loans...</div>
+            <div id="loan-list">
+                </div>
+        </section>
+    </main>
+    
+    <nav class="bottom-nav">
+        <a href="dashboard.html" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Dashboard
+        </a>
+        <a href="loan_list.html" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            Loan List
+        </a>
+        <a href="customer_list.html" class="nav-item active">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            Customers
+        </a>
+        <a href="#" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            Lender List
+        </a>
+    </nav>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // --- 1. SUPABASE SETUP ---
+        const SUPABASE_URL = 'https://xoqtcvydgbtskmqdjdog.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIZDI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
+        const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 2. DOM ELEMENTS ---
+        const dom = {
+            loadingCustomer: document.getElementById('loading-customer-message'),
+            customerContent: document.getElementById('customer-info-content'),
+            customerName: document.getElementById('customer-name-header'),
+            customerPhone: document.getElementById('customer-phone'),
+            customerAddress: document.getElementById('customer-address'),
+            
+            loadingLoans: document.getElementById('loading-loans-message'),
+            loanList: document.getElementById('loan-list')
+        };
+        
+        // Currency Formatter
+        const currencyFormatter = new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        });
+
+        // --- 3. HELPER FUNCTIONS ---
+
+        /**
+         * Shows a mobile-friendly toast notification.
+         */
+        function showToast(message, type = 'error', duration = 3000) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 400); 
+            }, duration);
+        }
+
+        /**
+         * Fetches and displays details for a single customer.
+         */
+        async function loadCustomerDetails(id) {
+            try {
+                const { data, error } = await sbClient
+                    .from('customers')
+                    .select('*')
+                    .eq('id', id)
+                    .single(); // Get one record
+
+                if (error) throw error;
+                
+                if (data) {
+                    dom.customerName.textContent = data.name;
+                    dom.customerPhone.textContent = data.phone || 'No phone provided';
+                    dom.customerAddress.textContent = data.address || 'No address provided';
+                    
+                    // Show the content
+                    dom.loadingCustomer.style.display = 'none';
+                    dom.customerContent.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('Error fetching customer details:', error);
+                dom.loadingCustomer.textContent = 'Error loading details.';
+                showToast('Error fetching customer: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Fetches and displays all loans for a single customer.
+         */
+        async function loadCustomerLoans(id) {
+            try {
+                const { data, error } = await sbClient
+                    .from('loans')
+                    .select('*') // Select all columns from loans table
+                    .eq('customer_id', id)
+                    .order('start_date', { ascending: false }); // Show newest first
+
+                if (error) throw error;
+
+                dom.loadingLoans.style.display = 'none';
+
+                if (data.length === 0) {
+                    dom.loanList.innerHTML = '<p style="text-align: center; color: var(--text-light);">No loans found for this customer.</p>';
+                    return;
+                }
+
+                let html = '';
+                for (const loan of data) {
+                    const principal = currencyFormatter.format(loan.principal_amount);
+                    const statusClass = loan.status ? `status-${loan.status.toLowerCase()}` : 'status-active';
+
+                    html += `
+                        <a href="loan_details.html?loan_id=${loan.id}" class="loan-card">
+                            <div class="loan-card-info">
+                                <h3>${principal}</h3>
+                                <p>Started: ${new Date(loan.start_date).toLocaleDateString()}</p>
+                            </div>
+                            <div class="loan-card-right">
+                                <span class="loan-status ${statusClass}">${loan.status || 'Active'}</span>
+                            </div>
+                            <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </a>
+                    `;
+                }
+                
+                dom.loanList.innerHTML = html;
+
+            } catch (error) {
+                console.error('Error fetching loans:', error);
+                dom.loadingLoans.textContent = 'Error loading loans.';
+                showToast('Error fetching customer loans: ' + error.message, 'error');
+            }
+        }
+
+        // --- 4. INITIALIZATION ---
+        
+        function init() {
+            // Get customer ID from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const customerId = urlParams.get('id');
+
+            if (!customerId) {
+                showToast('No customer ID found. Redirecting...', 'error');
+                setTimeout(() => {
+                    window.location.href = 'customer_list.html';
+                }, 2000);
+                return;
+            }
+            
+            // Load both customer details and their loans
+            loadCustomerDetails(customerId);
+            loadCustomerLoans(customerId);
+        }
+        
+        document.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
