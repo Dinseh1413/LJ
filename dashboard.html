@@ -312,27 +312,64 @@
         }
 
         /**
-         * Calculates the number of full months between two dates.
-         * This matches your specific business logic.
+         * [NEW] Calculates the detailed outstanding balance for a single loan,
+         * using the same month-by-month iterative logic as loan_details.html.
          */
-        function calculateFullMonths(startDateStr, endDate) {
-            const d1 = new Date(startDateStr);
-            const d2 = new Date(endDate); // 'endDate' is already a Date object
+        function calculateLoanOutstanding(loan, transactions) {
+            const loanTransactions = [...transactions]
+                .sort((a, b) => new Date(a.txn_date) - new Date(b.txn_date)); 
 
-            let months;
-            months = (d2.getFullYear() - d1.getFullYear()) * 12;
-            months -= d1.getMonth();
-            months += d2.getMonth();
+            const monthlyRate = (loan.interest_rate / 100) / 12;
+            const startDate = new Date(loan.start_date);
+            const today = new Date();
             
-            // If the end day is before the start day, the last month isn't "full"
-            if (d2.getDate() < d1.getDate()) {
-                months--;
+            let currentPrincipal = loan.principal_amount;
+            let totalInterestAccrued = 0;
+            let totalInterestPaid = 0;
+            let totalPrincipalPaid = 0;
+            
+            let txnIndex = 0;
+            // Start calculation from the first day of the loan's start month
+            let calcDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+            while (calcDate <= today) {
+                // Calculate interest for the month based on the principal at the start of the month
+                const interestForThisMonth = currentPrincipal * monthlyRate;
+                totalInterestAccrued += interestForThisMonth;
+                
+                // Find the start of the *next* month
+                const nextMonthStartDate = new Date(calcDate.getFullYear(), calcDate.getMonth() + 1, 1);
+
+                // Process all transactions that occurred *before* the next month starts
+                while (txnIndex < loanTransactions.length && new Date(loanTransactions[txnIndex].txn_date) < nextMonthStartDate) {
+                    const txn = loanTransactions[txnIndex];
+                    
+                    if (txn.txn_type === 'Interest Payment') {
+                        totalInterestPaid += txn.amount;
+                    } else if (txn.txn_type === 'Principal Repayment') {
+                        currentPrincipal -= txn.amount; // Principal is reduced *within* the month
+                        totalPrincipalPaid += txn.amount;
+                    }
+                    txnIndex++;
+                }
+                
+                // Move to the next month
+                calcDate = nextMonthStartDate;
             }
-            return months <= 0 ? 0 : months;
+            
+            const outstandingPrincipal = loan.principal_amount - totalPrincipalPaid;
+            const outstandingInterest = totalInterestAccrued - totalInterestPaid;
+
+            return {
+                principal: outstandingPrincipal,
+                interest: outstandingInterest
+            };
         }
+
 
         /**
          * Fetches all stats and updates the dashboard.
+         * [MODIFIED] To use the new detailed calculation.
          */
         async function loadDashboardStats() {
             try {
@@ -347,31 +384,59 @@
 
                 if (loanError) throw loanError;
                 if (customerError) throw customerError;
-                
-                let totalPrincipal = 0;
-                let totalInterest = 0;
-                const today = new Date();
 
-                // Loop through each active loan to calculate its interest
-                for (const loan of loans) {
-                    const principal = parseFloat(loan.principal_amount);
-                    const annualRate = parseFloat(loan.interest_rate) / 100;
-                    const monthlyRate = annualRate / 12;
-                    
-                    const fullMonths = calculateFullMonths(loan.start_date, today);
-                    
-                    const interest = principal * monthlyRate * fullMonths;
-                    
-                    totalPrincipal += principal;
-                    totalInterest += interest;
+                if (!loans || loans.length === 0) {
+                    // Handle no active loans
+                    dom.totalOutstanding.textContent = currencyFormatter.format(0);
+                    dom.totalPrincipal.textContent = currencyFormatter.format(0);
+                    dom.totalInterest.textContent = currencyFormatter.format(0);
+                    dom.totalActiveLoans.textContent = 0;
+                    dom.totalCustomers.textContent = customerCount || 0;
+                    return;
                 }
                 
-                const totalOutstanding = totalPrincipal + totalInterest;
+                // --- NEW LOGIC STARTS HERE ---
                 
-                // Update the DOM
-                dom.totalOutstanding.textContent = currencyFormatter.format(totalOutstanding);
-                dom.totalPrincipal.textContent = currencyFormatter.format(totalPrincipal);
-                dom.totalInterest.textContent = currencyFormatter.format(totalInterest);
+                // 1. Get all transactions for these active loans
+                const activeLoanIds = loans.map(loan => loan.id);
+                const { data: allTransactions, error: txnError } = await sbClient
+                    .from('loan_transactions')
+                    .select('*')
+                    .in('loan_id', activeLoanIds);
+                    
+                if (txnError) throw txnError;
+                
+                // 2. Group transactions by loan_id for easy lookup
+                const transactionsByLoanId = allTransactions.reduce((acc, txn) => {
+                    if (!acc[txn.loan_id]) {
+                        acc[txn.loan_id] = [];
+                    }
+                    acc[txn.loan_id].push(txn);
+                    return acc;
+                }, {});
+
+                // 3. Initialize aggregate totals
+                let totalOutstandingAgg = 0;
+                let totalPrincipalAgg = 0;
+                let totalInterestAgg = 0;
+
+                // 4. Loop through each active loan and use the new calculator
+                for (const loan of loans) {
+                    const loanTransactions = transactionsByLoanId[loan.id] || [];
+                    const { principal, interest } = calculateLoanOutstanding(loan, loanTransactions);
+                    
+                    totalPrincipalAgg += principal;
+                    totalInterestAgg += interest;
+                }
+                
+                totalOutstandingAgg = totalPrincipalAgg + totalInterestAgg;
+                
+                // --- NEW LOGIC ENDS HERE ---
+                
+                // 5. Update the DOM
+                dom.totalOutstanding.textContent = currencyFormatter.format(totalOutstandingAgg);
+                dom.totalPrincipal.textContent = currencyFormatter.format(totalPrincipalAgg);
+                dom.totalInterest.textContent = currencyFormatter.format(totalInterestAgg);
                 dom.totalActiveLoans.textContent = loans.length;
                 dom.totalCustomers.textContent = customerCount;
 
