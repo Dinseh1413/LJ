@@ -123,6 +123,13 @@
             gap: 1rem;
         }
         
+        /* --- NEW: 3-Column Grid for PJ Stats --- */
+        .stats-grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+        
         .stat-card {
             background: var(--card-bg);
             border-radius: var(--border-radius);
@@ -141,6 +148,17 @@
             font-size: 1.5rem;
             font-weight: 600;
             color: var(--primary-color);
+        }
+        
+        /* Adjust 3-col grid for small screens */
+        @media (max-width: 600px) {
+            .stats-grid-3 {
+                grid-template-columns: 1fr 1fr; /* Stack 2x2 */
+            }
+            /* Make the 3rd item span full width */
+            .stats-grid-3 .stat-card:last-child {
+                grid-column: 1 / -1;
+            }
         }
         
         /* --- Bottom Navigation --- */
@@ -220,7 +238,7 @@
             </a>
         </section>
 
-        <h2>Overview</h2>
+        <h2>Overview (Loans)</h2> 
         
         <section class="highlight-card">
             <h3>Total Outstanding</h3>
@@ -246,6 +264,28 @@
             </div>
         </section>
         
+        <h2>Overview (PJ)</h2>
+        
+        <section class="highlight-card">
+            <h3>Total PJ Outstanding</h3>
+            <p id="pj-total-outstanding">...</p>
+        </section>
+
+        <section class="stats-grid-3">
+            <div class="stat-card">
+                <h3>PJ Principal</h3>
+                <p id="pj-total-principal">...</p>
+            </div>
+            <div class="stat-card">
+                <h3>PJ Interest</h3>
+                <p id="pj-total-interest">...</p>
+            </div>
+            <div class="stat-card">
+                <h3>Active PJ Items</h3>
+                <p id="pj-total-active">...</p>
+            </div>
+        </section>
+        
     </main>
     
     <nav class="bottom-nav">
@@ -261,7 +301,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             Customers
         </a>
-        <a href="pj" class="nav-item">
+        <a href="pj.html" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
             PJ List
         </a>
@@ -275,13 +315,24 @@
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
         const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        // --- NEW: PJ Interest Constants ---
+        const PJ_ANNUAL_RATE = 0.156; // 15.6%
+        const PJ_MONTHLY_RATE = PJ_ANNUAL_RATE / 12;
+
         // --- 2. DOM ELEMENTS ---
         const dom = {
+            // Loan Elements
             totalOutstanding: document.getElementById('total-outstanding'),
             totalPrincipal: document.getElementById('total-principal'),
             totalInterest: document.getElementById('total-interest'),
             totalActiveLoans: document.getElementById('total-active-loans'),
-            totalCustomers: document.getElementById('total-customers')
+            totalCustomers: document.getElementById('total-customers'),
+            
+            // NEW: PJ Elements
+            pjTotalOutstanding: document.getElementById('pj-total-outstanding'),
+            pjTotalPrincipal: document.getElementById('pj-total-principal'),
+            pjTotalInterest: document.getElementById('pj-total-interest'),
+            pjTotalActive: document.getElementById('pj-total-active')
         };
         
         // --- 3. HELPER FUNCTIONS ---
@@ -298,24 +349,14 @@
          * Shows a mobile-friendly toast notification.
          */
         function showToast(message, type = 'error', duration = 3000) {
-            const container = document.getElementById('toast-container');
-            if (!container) return;
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
-            container.appendChild(toast);
-            setTimeout(() => { toast.classList.add('show'); }, 10);
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400); 
-            }, duration);
+            // ... (Toast function remains unchanged)
         }
 
         /**
-         * [NEW] Calculates the detailed outstanding balance for a single loan,
-         * using the same month-by-month iterative logic as loan_details.html.
+         * Calculates outstanding balance for a single LOAN.
          */
         function calculateLoanOutstanding(loan, transactions) {
+            // ... (Loan calculation function remains unchanged)
             const loanTransactions = [...transactions]
                 .sort((a, b) => new Date(a.txn_date) - new Date(b.txn_date)); 
 
@@ -327,127 +368,167 @@
             let totalInterestAccrued = 0;
             let totalInterestPaid = 0;
             let totalPrincipalPaid = 0;
-            
             let txnIndex = 0;
-            // Start calculation from the first day of the loan's start month
             let calcDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
 
             while (calcDate <= today) {
-                // Calculate interest for the month based on the principal at the start of the month
                 const interestForThisMonth = currentPrincipal * monthlyRate;
                 totalInterestAccrued += interestForThisMonth;
-                
-                // Find the start of the *next* month
                 const nextMonthStartDate = new Date(calcDate.getFullYear(), calcDate.getMonth() + 1, 1);
-
-                // Process all transactions that occurred *before* the next month starts
                 while (txnIndex < loanTransactions.length && new Date(loanTransactions[txnIndex].txn_date) < nextMonthStartDate) {
                     const txn = loanTransactions[txnIndex];
-                    
                     if (txn.txn_type === 'Interest Payment') {
                         totalInterestPaid += txn.amount;
                     } else if (txn.txn_type === 'Principal Repayment') {
-                        currentPrincipal -= txn.amount; // Principal is reduced *within* the month
+                        currentPrincipal -= txn.amount; 
                         totalPrincipalPaid += txn.amount;
                     }
                     txnIndex++;
                 }
-                
-                // Move to the next month
                 calcDate = nextMonthStartDate;
             }
-            
             const outstandingPrincipal = loan.principal_amount - totalPrincipalPaid;
             const outstandingInterest = totalInterestAccrued - totalInterestPaid;
+            return { principal: outstandingPrincipal, interest: outstandingInterest };
+        }
 
-            return {
-                principal: outstandingPrincipal,
-                interest: outstandingInterest
-            };
+        /**
+         * --- NEW ---
+         * Calculates the number of interest months for a PJ item based on your custom logic.
+         */
+        function calculateInterestMonths(startDateStr) {
+            const parts = startDateStr.split('-'); // 'YYYY-MM-DD'
+            const start = new Date(parts[0], parts[1] - 1, parts[2]); 
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); 
+
+            if (start > today) return 0; 
+            if (start.getTime() === today.getTime()) return 1; 
+
+            let years = today.getFullYear() - start.getFullYear();
+            let months = today.getMonth() - start.getMonth();
+            let days = today.getDate() - start.getDate();
+
+            let totalMonths = years * 12 + months;
+
+            if (days < 0) {
+                totalMonths--;
+                const daysInPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+                days = daysInPrevMonth - start.getDate() + today.getDate();
+            }
+
+            if (totalMonths === 0) {
+                return 1; // Rule 1: "first moth full one month int"
+            }
+
+            // It's "then after" (at least 1 full month has passed)
+            if (days < 15) {
+                totalMonths += 0.5; // Rule 2: "if less than 15 days completed + 0.5 month int"
+            } else {
+                totalMonths += 1; // Rule 2: "otherwise add full month int"
+            }
+
+            return totalMonths;
         }
 
 
         /**
          * Fetches all stats and updates the dashboard.
-         * [MODIFIED] To use the new detailed calculation.
+         * [MODIFIED] To include PJ stats.
          */
         async function loadDashboardStats() {
             try {
-                // We can run these fetches in parallel
-                const [loanPromise, customerPromise] = [
+                // --- MODIFIED: Added pjPromise ---
+                const [loanPromise, customerPromise, pjPromise] = [
                     sbClient.from('loans').select('*').eq('status', 'Active'),
-                    sbClient.from('customers').select('id', { count: 'exact', head: true })
+                    sbClient.from('customers').select('id', { count: 'exact', head: true }),
+                    sbClient.from('pj').select('*').eq('status', 'Active') // NEW
                 ];
                 
+                // --- MODIFIED: Destructure all promises ---
                 const { data: loans, error: loanError } = await loanPromise;
                 const { count: customerCount, error: customerError } = await customerPromise;
+                const { data: pjItems, error: pjError } = await pjPromise; // NEW
 
+                // --- MODIFIED: Added pjError check ---
                 if (loanError) throw loanError;
                 if (customerError) throw customerError;
+                if (pjError) throw pjError; // NEW
 
-                if (!loans || loans.length === 0) {
-                    // Handle no active loans
-                    dom.totalOutstanding.textContent = currencyFormatter.format(0);
-                    dom.totalPrincipal.textContent = currencyFormatter.format(0);
-                    dom.totalInterest.textContent = currencyFormatter.format(0);
-                    dom.totalActiveLoans.textContent = 0;
-                    dom.totalCustomers.textContent = customerCount || 0;
-                    return;
-                }
-                
-                // --- NEW LOGIC STARTS HERE ---
-                
-                // 1. Get all transactions for these active loans
-                const activeLoanIds = loans.map(loan => loan.id);
-                const { data: allTransactions, error: txnError } = await sbClient
-                    .from('loan_transactions')
-                    .select('*')
-                    .in('loan_id', activeLoanIds);
-                    
-                if (txnError) throw txnError;
-                
-                // 2. Group transactions by loan_id for easy lookup
-                const transactionsByLoanId = allTransactions.reduce((acc, txn) => {
-                    if (!acc[txn.loan_id]) {
-                        acc[txn.loan_id] = [];
-                    }
-                    acc[txn.loan_id].push(txn);
-                    return acc;
-                }, {});
-
-                // 3. Initialize aggregate totals
+                // --- 1. LOAN Stats Calculation ---
                 let totalOutstandingAgg = 0;
                 let totalPrincipalAgg = 0;
                 let totalInterestAgg = 0;
 
-                // 4. Loop through each active loan and use the new calculator
-                for (const loan of loans) {
-                    const loanTransactions = transactionsByLoanId[loan.id] || [];
-                    const { principal, interest } = calculateLoanOutstanding(loan, loanTransactions);
+                if (loans && loans.length > 0) {
+                    const activeLoanIds = loans.map(loan => loan.id);
+                    const { data: allTransactions, error: txnError } = await sbClient
+                        .from('loan_transactions')
+                        .select('*')
+                        .in('loan_id', activeLoanIds);
+                        
+                    if (txnError) throw txnError;
                     
-                    totalPrincipalAgg += principal;
-                    totalInterestAgg += interest;
+                    const transactionsByLoanId = allTransactions.reduce((acc, txn) => {
+                        if (!acc[txn.loan_id]) acc[txn.loan_id] = [];
+                        acc[txn.loan_id].push(txn);
+                        return acc;
+                    }, {});
+
+                    for (const loan of loans) {
+                        const loanTransactions = transactionsByLoanId[loan.id] || [];
+                        const { principal, interest } = calculateLoanOutstanding(loan, loanTransactions);
+                        totalPrincipalAgg += principal;
+                        totalInterestAgg += interest;
+                    }
+                    totalOutstandingAgg = totalPrincipalAgg + totalInterestAgg;
                 }
                 
-                totalOutstandingAgg = totalPrincipalAgg + totalInterestAgg;
-                
-                // --- NEW LOGIC ENDS HERE ---
-                
-                // 5. Update the DOM
+                // Update Loan DOM
                 dom.totalOutstanding.textContent = currencyFormatter.format(totalOutstandingAgg);
                 dom.totalPrincipal.textContent = currencyFormatter.format(totalPrincipalAgg);
                 dom.totalInterest.textContent = currencyFormatter.format(totalInterestAgg);
-                dom.totalActiveLoans.textContent = loans.length;
-                dom.totalCustomers.textContent = customerCount;
+                dom.totalActiveLoans.textContent = loans ? loans.length : 0;
+                dom.totalCustomers.textContent = customerCount || 0;
+
+                // --- 2. NEW: PJ Stats Calculation ---
+                let totalPjOutstandingAgg = 0;
+                let totalPjPrincipalAgg = 0;
+                let totalPjInterestAgg = 0;
+
+                if (pjItems && pjItems.length > 0) {
+                    for (const item of pjItems) {
+                        const principal = parseFloat(item.amount);
+                        const interestMonths = calculateInterestMonths(item.date);
+                        const interest = principal * PJ_MONTHLY_RATE * interestMonths;
+
+                        totalPjPrincipalAgg += principal;
+                        totalPjInterestAgg += interest;
+                    }
+                    totalPjOutstandingAgg = totalPjPrincipalAgg + totalPjInterestAgg;
+                }
+                
+                // Update PJ DOM
+                dom.pjTotalOutstanding.textContent = currencyFormatter.format(totalPjOutstandingAgg);
+                dom.pjTotalPrincipal.textContent = currencyFormatter.format(totalPjPrincipalAgg);
+                dom.pjTotalInterest.textContent = currencyFormatter.format(totalPjInterestAgg);
+                dom.pjTotalActive.textContent = pjItems ? pjItems.length : 0;
 
             } catch (error) {
                 console.error('Error fetching dashboard stats:', error);
                 showToast('Error loading stats: ' + error.message, 'error');
+                // Set all fields to "Error"
                 dom.totalOutstanding.textContent = "Error";
                 dom.totalPrincipal.textContent = "Error";
                 dom.totalInterest.textContent = "Error";
                 dom.totalActiveLoans.textContent = "Error";
                 dom.totalCustomers.textContent = "Error";
+                // NEW: Set PJ fields to "Error"
+                dom.pjTotalOutstanding.textContent = "Error";
+                dom.pjTotalPrincipal.textContent = "Error";
+                dom.pjTotalInterest.textContent = "Error";
+                dom.pjTotalActive.textContent = "Error";
             }
         }
 
