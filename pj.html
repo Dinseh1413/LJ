@@ -21,6 +21,8 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
+            /* Added padding for the bottom nav */
+            padding-bottom: 90px; 
         }
         .container {
             max-width: 800px;
@@ -42,7 +44,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px; /* Ensures table is wide enough on desktop */
+            min-width: 600px; 
         }
         th, td {
             padding: 1rem 1.25rem;
@@ -62,18 +64,58 @@
         td {
             font-size: 0.95rem;
         }
-        td:nth-child(3), td:nth-child(4) {
+        
+        /* Updated nth-child selectors for new "Months" column */
+        td:nth-child(3), /* Amount */
+        td:nth-child(4), /* Months */
+        td:nth-child(5) { /* Interest */
             font-weight: 600;
         }
-        td:nth-child(4) {
+        td:nth-child(5) { /* Interest */
             color: var(--primary-color);
         }
+
         .status {
             font-weight: 600;
         }
-        .status-Active { color: #388e3c; /* Green */ }
-        .status-Pending { color: #f57c00; /* Orange */ }
+        .status-Active { color: #388e3c; }
+        .status-Pending { color: #f57c00; }
         .status-Closed { color: var(--text-light); }
+
+        /* --- CSS for Bottom Navigation (Copied from dashboard.html) --- */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            background-color: var(--card-bg);
+            box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
+            padding: 0.75rem 0.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: var(--text-light);
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0 0.5rem;
+            flex-grow: 1;
+        }
+        .nav-item.active {
+            color: var(--primary-color);
+        }
+        .nav-item svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 4px;
+            stroke-width: 2;
+        }
     </style>
 </head>
 <body>
@@ -88,18 +130,35 @@
                         <th>ID</th>
                         <th>Date</th>
                         <th>Amount</th>
-                        <th>Interest</th>
+                        <th>Months</th> <th>Interest</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody id="pj-list-body">
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 2rem;">Loading...</td>
+                        <td colspan="6" style="text-align: center; padding: 2rem;">Loading...</td>
                     </tr>
                 </tbody>
             </table>
         </div>
     </main>
+
+    <nav class="bottom-nav">
+        <a href="dashboard.html" class="nav-item"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Dashboard
+        </a>
+        <a href="loan_list.html" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            Loan List
+        </a>
+        <a href="customer.html" class="nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            Customers
+        </a>
+        <a href="pj.html" class="nav-item active"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            PJ List
+        </a>
+    </nav>
 
     <script>
         // --- 1. SUPABASE SETUP ---
@@ -130,19 +189,16 @@
         
         /**
          * Calculates the number of interest months based on your custom logic.
-         * Logic:
-         * 1. First month is always 1 full month's interest.
-         * 2. After that, partial months < 15 days are 0.5, and >= 15 days are 1.
          */
         function calculateInterestMonths(startDateStr) {
             const parts = startDateStr.split('-'); // 'YYYY-MM-DD'
-            const start = new Date(parts[0], parts[1] - 1, parts[2]); // (Year, MonthIndex, Day)
+            const start = new Date(parts[0], parts[1] - 1, parts[2]); 
             
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Zero out time for clean comparison
+            today.setHours(0, 0, 0, 0); 
 
-            if (start > today) return 0; // Not started yet
-            if (start.getTime() === today.getTime()) return 1; // Started today, counts as 1 month
+            if (start > today) return 0; 
+            if (start.getTime() === today.getTime()) return 1; 
 
             let years = today.getFullYear() - start.getFullYear();
             let months = today.getMonth() - start.getMonth();
@@ -151,18 +207,12 @@
             let totalMonths = years * 12 + months;
 
             if (days < 0) {
-                // Borrow from previous month
                 totalMonths--;
-                // Get days in the month *before* today
                 const daysInPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
                 days = daysInPrevMonth - start.getDate() + today.getDate();
             }
 
-            // 'totalMonths' now holds the number of *full* months passed.
-            // 'days' holds the number of days passed in the *current* partial month.
-
             if (totalMonths === 0) {
-                // It's in the first month (e.g., Oct 5 to Oct 29)
                 return 1; // Rule 1: "first moth full one month int"
             }
 
@@ -189,12 +239,12 @@
                 const { data, error } = await sbClient
                     .from('pj')
                     .select('*')
-                    .order('date', { ascending: false }); // Show newest first
+                    .order('date', { ascending: false }); 
 
                 if (error) throw error;
 
                 if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">No PJ records found.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">No PJ records found.</td></tr>';
                     return;
                 }
 
@@ -202,18 +252,21 @@
                     const principal = parseFloat(item.amount);
                     
                     let interest = 0;
+                    let interestMonths = 0; // Default to 0
                     
                     // Only calculate interest for 'Active' items
                     if (item.status === 'Active') {
-                        const interestMonths = calculateInterestMonths(item.date);
-                        interest = principal * MONTHLY_RATE * interestMonths;
+                        interestMonths = calculateInterestMonths(item.date); // Calculate months
+                        interest = principal * MONTHLY_RATE * interestMonths; // Calculate interest
                     }
 
                     const row = document.createElement('tr');
+                    // Added new <td> for interestMonths
                     row.innerHTML = `
                         <td>${item.pj_id}</td>
                         <td>${dateFormatter(item.date)}</td>
                         <td>${currencyFormatter.format(principal)}</td>
+                        <td>${interestMonths}</td>
                         <td>${currencyFormatter.format(interest)}</td>
                         <td>
                             <span class="status status-${item.status || 'Pending'}">
@@ -226,7 +279,7 @@
 
             } catch (error) {
                 console.error('Error fetching PJ list:', error);
-                tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: red;">Error: ${error.message}</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: red;">Error: ${error.message}</td></tr>`;
             }
         }
 
