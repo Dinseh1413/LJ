@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PJ List</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary-color: #3949ab;
+            --text-color: #212121;
+            --text-light: #757575;
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --border-radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 600px; /* Ensures table is wide enough on desktop */
+        }
+        th, td {
+            padding: 1rem 1.25rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: #fafafa;
+            font-size: 0.85rem;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        td {
+            font-size: 0.95rem;
+        }
+        td:nth-child(3), td:nth-child(4) {
+            font-weight: 600;
+        }
+        td:nth-child(4) {
+            color: var(--primary-color);
+        }
+        .status {
+            font-weight: 600;
+        }
+        .status-Active { color: #388e3c; /* Green */ }
+        .status-Pending { color: #f57c00; /* Orange */ }
+        .status-Closed { color: var(--text-light); }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1>PJ List</h1>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Interest</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="pj-list-body">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. SUPABASE SETUP ---
+        const SUPABASE_URL = 'https://xoqtcvydgbtskmqdjdog.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
+        const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 2. CONFIG & FORMATTERS ---
+        const ANNUAL_RATE = 0.156; // 15.6%
+        const MONTHLY_RATE = ANNUAL_RATE / 12;
+
+        const currencyFormatter = new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            minimumFractionDigits: 2,
+        });
+
+        const dateFormatter = (dateStr) => {
+            const date = new Date(dateStr.split('-')[0], dateStr.split('-')[1] - 1, dateStr.split('-')[2]);
+            return date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        };
+
+        // --- 3. CORE INTEREST LOGIC ---
+        
+        /**
+         * Calculates the number of interest months based on your custom logic.
+         * Logic:
+         * 1. First month is always 1 full month's interest.
+         * 2. After that, partial months < 15 days are 0.5, and >= 15 days are 1.
+         */
+        function calculateInterestMonths(startDateStr) {
+            const parts = startDateStr.split('-'); // 'YYYY-MM-DD'
+            const start = new Date(parts[0], parts[1] - 1, parts[2]); // (Year, MonthIndex, Day)
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Zero out time for clean comparison
+
+            if (start > today) return 0; // Not started yet
+            if (start.getTime() === today.getTime()) return 1; // Started today, counts as 1 month
+
+            let years = today.getFullYear() - start.getFullYear();
+            let months = today.getMonth() - start.getMonth();
+            let days = today.getDate() - start.getDate();
+
+            let totalMonths = years * 12 + months;
+
+            if (days < 0) {
+                // Borrow from previous month
+                totalMonths--;
+                // Get days in the month *before* today
+                const daysInPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+                days = daysInPrevMonth - start.getDate() + today.getDate();
+            }
+
+            // 'totalMonths' now holds the number of *full* months passed.
+            // 'days' holds the number of days passed in the *current* partial month.
+
+            if (totalMonths === 0) {
+                // It's in the first month (e.g., Oct 5 to Oct 29)
+                return 1; // Rule 1: "first moth full one month int"
+            }
+
+            // It's "then after" (at least 1 full month has passed)
+            if (days < 15) {
+                totalMonths += 0.5; // Rule 2: "if less than 15 days completed + 0.5 month int"
+            } else {
+                totalMonths += 1; // Rule 2: "otherwise add full month int"
+            }
+
+            return totalMonths;
+        }
+
+        // --- 4. MAIN FUNCTION ---
+
+        /**
+         * Fetches all PJ records and renders them to the table.
+         */
+        async function loadPjList() {
+            const tableBody = document.getElementById('pj-list-body');
+            tableBody.innerHTML = ''; // Clear "Loading..."
+
+            try {
+                const { data, error } = await sbClient
+                    .from('pj')
+                    .select('*')
+                    .order('date', { ascending: false }); // Show newest first
+
+                if (error) throw error;
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">No PJ records found.</td></tr>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const principal = parseFloat(item.amount);
+                    
+                    let interest = 0;
+                    
+                    // Only calculate interest for 'Active' items
+                    if (item.status === 'Active') {
+                        const interestMonths = calculateInterestMonths(item.date);
+                        interest = principal * MONTHLY_RATE * interestMonths;
+                    }
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.pj_id}</td>
+                        <td>${dateFormatter(item.date)}</td>
+                        <td>${currencyFormatter.format(principal)}</td>
+                        <td>${currencyFormatter.format(interest)}</td>
+                        <td>
+                            <span class="status status-${item.status || 'Pending'}">
+                                ${item.status || 'Pending'}
+                            </span>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+            } catch (error) {
+                console.error('Error fetching PJ list:', error);
+                tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: red;">Error: ${error.message}</td></tr>`;
+            }
+        }
+
+        // --- 5. INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', loadPjList);
+    </script>
+
+</body>
+</html>
