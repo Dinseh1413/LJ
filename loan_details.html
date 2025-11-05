@@ -64,6 +64,24 @@
             padding-bottom: 0.5rem;
             margin-top: 1rem;
         }
+        
+        /* --- NEW: Loan Status Badge --- */
+        .loan-status-badge {
+            display: block;
+            width: max-content;
+            margin: -0.5rem auto 1rem auto;
+            padding: 0.4rem 1rem;
+            font-weight: 600;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: white;
+        }
+        .status-closed {
+            background-color: var(--secondary-color);
+        }
+        .status-active {
+            background-color: var(--success-color);
+        }
 
         /* --- 2. Card Styles --- */
         .card {
@@ -72,12 +90,20 @@
             box-shadow: var(--shadow);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            transition: box-shadow 0.2s ease-in-out;
+            transition: box-shadow 0.2s ease-in-out, opacity 0.3s ease;
         }
         
         .card:hover {
             box-shadow: var(--shadow-hover);
         }
+        
+        /* --- NEW: Class to show loan is closed --- */
+        .loan-closed-overlay {
+            opacity: 0.6;
+            pointer-events: none;
+            user-select: none;
+        }
+
 
         /* --- 3. Summary Section --- */
         .summary-grid {
@@ -378,12 +404,42 @@
             stroke-width: 2;
         }
         
+        /* --- NEW: 9. Action Buttons --- */
+        .action-btn {
+            width: 100%;
+            padding: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s;
+        }
+
+        .btn-danger {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #b71c1c;
+        }
+
+        .btn-danger:disabled {
+            background-color: var(--secondary-light);
+            color: var(--text-light);
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
     </style>
 </head>
 <body>
 
     <main class="container">
         <h1>Loan Ledger</h1>
+        
+        <div id="loan-status-badge"></div>
 
         <section class="card">
             <h2>Loan Summary</h2>
@@ -459,7 +515,7 @@
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" id="add-txn-card">
             <h2>Add Transaction</h2>
             <form id="txn-form">
                 <div class="form-row">
@@ -492,10 +548,15 @@
             <ul class="transaction-list" id="transaction-list">
                 </ul>
         </section>
+        
+        <section class="card" id="loan-actions-card">
+            <h2>Loan Actions</h2>
+            <button id="close-loan-btn" class="action-btn btn-danger">Close This Loan</button>
+        </section>
 
     </main>
     
-  <nav class="bottom-nav">
+    <nav class="bottom-nav">
         <a href="dashboard.html" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
             Dashboard
@@ -504,11 +565,11 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             Loan List
         </a>
-        <a href="customer.html" class="nav-item">
+        <a href="customer_list.html" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             Customers
         </a>
-        <a href="pj" class="nav-item">
+        <a href="pj.html" class="nav-item">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
             PJ List
         </a>
@@ -519,7 +580,6 @@
         const SUPABASE_URL = 'https://xoqtcvydgbtskmqdjdog.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvcXRjdnlkZ2J0c2ttcWRqZG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE0NjY4ODQsImV4cCI6MjA3NzA0Mjg4NH0.HbytfLnLhELjHTsFdqwaywRu1rHJHaKO_TojmLrMCHI';
         
-        // --- FIX: Renamed constant to 'sbClient' ---
         const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // --- 2. GLOBAL STATE ---
@@ -537,6 +597,7 @@
         });
         
         const dateFormatter = (dateStr) => {
+            if (!dateStr) return 'N/A';
             const date = new Date(dateStr);
             const userTimezoneOffset = date.getTimezoneOffset() * 60000;
             return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('en-GB', {
@@ -549,11 +610,13 @@
         // --- 4. DOM ELEMENTS ---
         const dom = {
             container: document.querySelector('.container'),
+            // NEW: Status Badge
+            loanStatusBadge: document.getElementById('loan-status-badge'),
+            
             // Summary Card
             customerName: document.getElementById('customer-name'),
             customerPhone: document.getElementById('customer-phone'),
             principalAmount: document.getElementById('principal-amount'),
-            // NEW: Added gross and net
             grossWeight: document.getElementById('gross-weight'),
             netWeight: document.getElementById('net-weight'),
             interestRate: document.getElementById('interest-rate'),
@@ -570,6 +633,7 @@
             interestBreakdownList: document.getElementById('interest-breakdown-list'),
             
             // Form Card
+            addTxnCard: document.getElementById('add-txn-card'), // NEW
             txnForm: document.getElementById('txn-form'),
             txnDate: document.getElementById('txn-date'),
             txnType: document.getElementById('txn-type'),
@@ -578,7 +642,11 @@
             addTxnBtn: document.getElementById('add-txn-btn'),
             
             // History Card
-            transactionList: document.getElementById('transaction-list')
+            transactionList: document.getElementById('transaction-list'),
+            
+            // NEW: Action Card
+            loanActionsCard: document.getElementById('loan-actions-card'),
+            closeLoanBtn: document.getElementById('close-loan-btn')
         };
 
         // --- 5. CORE FUNCTIONS ---
@@ -590,12 +658,8 @@
             dom.customerName.textContent = g_customer.name || 'N/A';
             dom.customerPhone.textContent = g_customer.phone || 'N/A';
             dom.principalAmount.textContent = currencyFormatter.format(g_loan.principal_amount || 0);
-            
-            // NEW: Render gross and net weights
-            // Uses 'g' for grams. Shows N/A if data is null.
             dom.grossWeight.textContent = g_loan.gross ? `${g_loan.gross} g` : 'N/A';
             dom.netWeight.textContent = g_loan.net ? `${g_loan.net} g` : 'N/A';
-            
             dom.interestRate.textContent = `${g_loan.interest_rate || 0}% p.a.`;
             dom.startDate.textContent = dateFormatter(g_loan.start_date || new Date());
             dom.articles.textContent = g_loan.articles || 'N/A';
@@ -607,6 +671,7 @@
          * Renders the transaction list based on the *global state variables*.
          */
         function renderTransactions() {
+            // ... (Function unchanged)
             const sortedForDisplay = [...g_transactions]
                 .sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date)); 
             
@@ -647,6 +712,7 @@
          * Renders the interest breakdown table.
          */
         function renderInterestBreakdown(breakdown) {
+            // ... (Function unchanged)
             dom.interestBreakdownList.innerHTML = '';
             if (!breakdown || breakdown.length === 0) {
                 dom.interestBreakdownList.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-light);">No interest accrued yet.</td></tr>';
@@ -668,6 +734,7 @@
          * Calculates loan status based on *global state variables*.
          */
         function calculateLoanStatus() {
+            // ... (Function unchanged)
             if (!g_loan.id) return; 
 
             const loan = g_loan;
@@ -726,9 +793,9 @@
 
         /**
          * Handles the "Add Transaction" form submission.
-         * Writes the new transaction to Supabase.
          */
         async function handleAddTransaction(event) {
+            // ... (Function unchanged)
             event.preventDefault(); 
 
             const date = dom.txnDate.value;
@@ -757,7 +824,6 @@
                 note: note
             };
 
-            // --- FIX: Use 'sbClient' ---
             const { data, error } = await sbClient
                 .from('loan_transactions')
                 .insert(newTxnData);
@@ -779,18 +845,88 @@
         }
         
         /**
+         * --- NEW ---
+         * Handles the "Close Loan" button click.
+         * Updates the loan status to 'Closed' in Supabase.
+         */
+        async function handleCloseLoan() {
+            const confirmClose = confirm(
+                'Are you sure you want to close this loan?\n\n' +
+                'This will set the status to "Closed" and record today\'s date. ' +
+                'You will not be able to add new transactions.'
+            );
+            
+            if (!confirmClose) return;
+
+            dom.closeLoanBtn.disabled = true;
+            dom.closeLoanBtn.textContent = 'Closing...';
+
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            const { data, error } = await sbClient
+                .from('loans')
+                .update({ 
+                    status: 'Closed', 
+                    closed_date: todayStr 
+                })
+                .eq('id', g_currentLoanId)
+                .select()
+                .single();
+
+            if (error) {
+                alert('Error closing loan: ' + error.message);
+                console.error(error);
+                dom.closeLoanBtn.disabled = false;
+                dom.closeLoanBtn.textContent = 'Close This Loan';
+            } else {
+                alert('Loan successfully closed.');
+                // Reload all data to reflect the new "Closed" state
+                await loadDataAndRender(g_currentLoanId);
+            }
+        }
+        
+        /**
          * Helper function to call all render functions.
+         * --- MODIFIED ---
+         * Now checks loan status and updates UI accordingly.
          */
         function rerenderUI() {
             renderLoanDetails();
             renderTransactions();
             calculateLoanStatus(); // This also renders the breakdown
+
+            // Check loan status and update UI
+            if (g_loan.status === 'Closed') {
+                // Show "Closed" badge
+                dom.loanStatusBadge.innerHTML = `<span class="loan-status-badge status-closed">Closed on ${dateFormatter(g_loan.closed_date)}</span>`;
+                
+                // Disable Add Transaction card
+                dom.addTxnCard.classList.add('loan-closed-overlay');
+                dom.addTxnBtn.disabled = true;
+                
+                // Disable Loan Actions card
+                dom.loanActionsCard.classList.add('loan-closed-overlay');
+                dom.closeLoanBtn.disabled = true;
+                dom.closeLoanBtn.textContent = 'Loan is Closed';
+
+            } else {
+                // Show "Active" badge
+                dom.loanStatusBadge.innerHTML = '<span class="loan-status-badge status-active">Active</span>';
+                
+                // Ensure cards are enabled
+                dom.addTxnCard.classList.remove('loan-closed-overlay');
+                dom.addTxnBtn.disabled = false;
+                dom.loanActionsCard.classList.remove('loan-closed-overlay');
+                dom.closeLoanBtn.disabled = false;
+                dom.closeLoanBtn.textContent = 'Close This Loan';
+            }
         }
         
         /**
          * Fetches all required data from Supabase and then renders the UI.
          */
         async function loadDataAndRender(loan_id) {
+            // ... (Function unchanged)
             if (!loan_id) {
                 dom.container.innerHTML = '<h1>Error: No Loan ID provided in URL.</h1><p>Please access this page with a URL like: <code>...page.html?loan_id=123</code></p>';
                 return;
@@ -801,10 +937,9 @@
             dom.container.style.opacity = '0.5';
 
             // 1. Fetch Loan
-            // --- FIX: Use 'sbClient' ---
             let { data: loanData, error: loanError } = await sbClient
                 .from('loans')
-                .select('*') // select * will include gross and net
+                .select('*') 
                 .eq('id', loan_id)
                 .single(); 
 
@@ -815,7 +950,6 @@
             g_loan = loanData;
 
             // 2. Fetch Customer
-            // --- FIX: Use 'sbClient' ---
             let { data: customerData, error: customerError } = await sbClient
                 .from('customers')
                 .select('*')
@@ -829,7 +963,6 @@
             }
 
             // 3. Fetch Transactions
-            // --- FIX: Use 'sbClient' ---
             let { data: transactionsData, error: transactionsError } = await sbClient
                 .from('loan_transactions')
                 .select('*')
@@ -860,6 +993,9 @@
 
             // 2. Add form submit listener
             dom.txnForm.addEventListener('submit', handleAddTransaction);
+
+            // --- NEW: Add close loan listener ---
+            dom.closeLoanBtn.addEventListener('click', handleCloseLoan);
 
             // 3. Load data and render
             loadDataAndRender(loanIdFromUrl);
